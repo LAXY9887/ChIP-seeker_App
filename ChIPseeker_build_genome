@@ -1,0 +1,51 @@
+#!/home/ls807terra/Programs/anaconda3/envs/env_R4.1/bin/Rscript --vanilla
+# ChIPseeker build user define database sqlite file
+# version R4.1.3
+# ----------------------------------------------------------------------------------------- #
+# Option parser
+pacman::p_load("optparse")
+
+option_list = list(
+  make_option(c("-g", "--gtf"), type="character", default=NULL,
+              help="input genome annotation GTF/GFF3 file path", metavar="GTF/GFF3"),
+  make_option(c("-o", "--outdir"), type="character", default="./",
+              help="output sqlite directory [default= %default]", metavar="OUTPUT"),
+  make_option(c("-n", "--name_prefix"), type="character", default="Sqlite",
+              help="Output sqlite name [default= %default]", metavar="sqlite_name"),
+  make_option(c("-N", "--species_name"), type="character", default=NULL,
+              help="Please enter species Name! in R GenomeInfoDb:::lookup_tax_id_by_organism(organism) to Check!!", metavar="species")
+)
+
+opt_parser = OptionParser(option_list=option_list)
+opt = parse_args(opt_parser)
+
+#
+if (is.null(opt$gtf)){
+  print_help(opt_parser)
+  stop("At least one argument must be supplied (gtf file).n", call.=FALSE)
+}
+
+if (is.null(opt$species_name)){
+  stop("Need a formal species name (-N --species_name) \nPlease enter species Name! in R GenomeInfoDb:::lookup_tax_id_by_organism(organism) to Check!!", call.=FALSE)
+}
+
+# ----------------------------------------------------------------------------------------- #
+# Customize genome
+pacman::p_load(GenomicFeatures,AnnotationDbi,ChIPseeker)
+genome_annotation_ <- opt$gtf
+genome_organism_ <- opt$species_name
+print("Load annotation & build database...")
+# load gtf file as Database
+print(paste("Loading GFF3/GTF from",genome_annotation_))
+txdb <- makeTxDbFromGFF(
+  file = genome_annotation_,
+  organism = genome_organism_
+)
+print("Ok")
+# Save database
+saveDb(txdb, paste0(opt$outdir,"/",opt$name_prefix,'.sqlite'))
+# Load saved database
+ltxdb <- loadDb(file = paste0(opt$outdir,"/",opt$name_prefix,'.sqlite'))
+print("Save & Loading genome database...")
+print("Ok")
+# ----------------------------------------------------------------------------------------- #

@@ -1,0 +1,3 @@
+awk '{OFS="\t"}{if (NR>31){print $1,$2,$3,$7,$8,$10}}' Mac2_16thlane_SC-ATAC_p005_peaks.xls > Mac2_16thlane_SC-ATAC_p005_peaks.xls.bed
+
+for i in SC-ATAC SCR-CCAR1 SCR-H3K4ME3-2 SCR-H3K4ME3 SCR-Pol2ser5 SCR-WDR82 TERC-ATAC TERC-CCAR1 TERC-H3K4ME3-2 TERC-H3K4ME3 TERC-Pol2ser5 TERC-WDR82 ; do awk '{OFS="\t"}{if (NR>31){print $1,$2,$3,$10,$7,$8}}' ./16thlane_merge_${i}_noINPUT/16thane_merged_${i}_Macs2_noINPUT_0.05_peaks.xls > ./16thlane_merge_${i}_noINPUT/16thane_merged_${i}_Macs2_noINPUT_0.05_peaks.bed; done

@@ -1,0 +1,27 @@
+#!/home/ls807terra/Programs/anaconda3/envs/env_R4.1/bin/Rscript --vanilla
+
+pacman::p_load("optparse")
+
+option_list = list(
+  make_option(c("-p", "--peaks_file"), type="character", default=NULL,
+              help="input MACS call peaks file path", metavar="MACS_Peak"),
+  make_option(c("-o", "--outdir"), type="character", default="./",
+              help="output directory [default= %default]", metavar="OUTPUT"),
+  make_option(c("-r", "--range"), type="integer", default=3000,
+              help="Promoter range [default= %default]", metavar="range"),
+  make_option(c("-n", "--name_prefix"), type="character", default=NA,
+              help="Output files name [default= %default]", metavar="name"),
+  make_option(c("-d", "--database"), type="character", default=NULL,
+              help="User defined sqlite database [default= %default]", metavar="database")
+)
+ 
+opt_parser = OptionParser(option_list=option_list)
+opt = parse_args(opt_parser)
+
+if (is.null(opt$peaks_file)){
+  print_help(opt_parser)
+  stop("At least one argument must be supplied (input file).n", call.=FALSE)
+}
+
+print(opt)
+
