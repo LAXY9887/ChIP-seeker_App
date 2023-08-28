@@ -1,0 +1,217 @@
+#!/home/ls807terra/Programs/anaconda3/envs/env_R4.1/bin/Rscript --vanilla
+# version R4.1.3
+# Manual
+# http://bioconductor.org/packages/devel/bioc/vignettes/ChIPseeker/inst/doc/ChIPseeker.html
+# https://seandavi.github.io/ITR/transcriptdb.html
+
+# install.packages("pacman")
+# pacman::p_load(rio, BiocManager)
+# BiocManager::install("ChIPseeker")
+
+# For mm10 or human, using existing database
+# BiocManager::install("TxDb.Mmusculus.UCSC.mm10.knownGene")
+# BiocManager::install("TxDb.Hsapiens.UCSC.hg38.knownGene")
+# BiocManager::install("org.Mm.eg.db")
+# BiocManager::install("org.Hs.eg.db")
+# BiocManager::install("EnsDb.Hsapiens.v86")
+# BiocManager::install("EnsDb.Mmusculus.v79")
+
+
+# library("TxDb.Mmusculus.UCSC.mm10.knownGene")
+# library("TxDb.Hsapiens.UCSC.hg38.knownGene")
+# library("org.Mm.eg.db")
+# library("org.Hs.eg.db")
+# library("EnsDb.Hsapiens.v86")
+# library("EnsDb.Mmusculus.v79")
+
+# Build a database by yourself
+# BiocManager::install("GenomicFeatures")
+# BiocManager::install("AnnotationDbi")
+# ----------------------------------------------------------------------------------------- #
+# Option parser
+pacman::p_load("optparse")
+
+option_list = list(
+  make_option(c("-p", "--peaks_file"), type="character", default=NULL,
+              help="input MACS call peaks file path", metavar="MACS_Peak"),
+  make_option(c("-o", "--outdir"), type="character", default="./",
+              help="output directory [default= %default]", metavar="OUTPUT"),
+  make_option(c("-r", "--range"), type="integer", default=3000,
+              help="Promoter range [default= %default]", metavar="range"),
+  make_option(c("-w", "--weight_column"), type="character", default="V6",
+              help="Colunm name in MACS peak file that describe the fold enrichment, default is at 'V6' colum [default= %default]",
+              metavar="weightcol"),
+  make_option(c("-n", "--name_prefix"), type="character", default=NA,
+              help="Output files name [default= %default]", metavar="name"),
+  make_option(c("-d", "--database"), type="character", default="mm10",
+              help="User defined sqlite database, set 'mm10' for mouse 'hg38' for human [default= %default]", 
+              metavar="database or path_to_sqlite")
+)
+ 
+opt_parser = OptionParser(option_list=option_list)
+opt = parse_args(opt_parser)
+
+#
+if (is.null(opt$peaks_file)){
+  print_help(opt_parser)
+  stop("At least one argument must be supplied (input file).n", call.=FALSE)
+}
+
+user_genome = FALSE
+#
+if (opt$database=="mm10"){
+  print("Use default mm10 database: TxDb.Mmusculus.UCSC.mm10.knownGene")
+  library("TxDb.Mmusculus.UCSC.mm10.knownGene")
+  db <- TxDb.Mmusculus.UCSC.mm10.knownGene
+}else if (opt$database=="hg38"){
+  print("Use default hg38 database: TxDb.Hsapiens.UCSC.hg38.knownGene")
+  library("TxDb.Hsapiens.UCSC.hg38.knownGene")
+  db <- TxDb.Hsapiens.UCSC.hg38.knownGene
+}else{
+  db <- opt$database
+  user_genome = TRUE
+  print(paste0("User define database, sqlite path = ",db))
+}
+# ----------------------------------------------------------------------------------------- #
+# Load ChIPseeker and annotation table
+pacman::p_load(ChIPseeker,GenomicFeatures,AnnotationDbi)
+
+# Input parameters
+peak.file <- opt$peaks_file
+database <- db
+promoter_range <- opt$range
+fold_enrich_column <- opt$weight_column
+output_path <- paste0(opt$outdir,"/")
+saved_name <- opt$name_prefix
+print(paste("peakfile:",peak.file))
+print(paste("peak fold enrichment column:",fold_enrich_column))
+print(paste("promoter_range:",promoter_range))
+print(paste0("output:",output_path,saved_name))
+# ----------------------------------------------------------------------------------------- #
+print("Load peak file & annotation database...")
+# Load peak file 
+peaks <- readPeakFile(peak.file)
+# Load genome database
+if (user_genome){
+  txdb <- loadDb(file = database)
+}else{
+  txdb <- database
+}
+print("Ok")
+# ----------------------------------------------------------------------------------------- #
+# Plot into PDF
+print("Plot ChIP peak distribution")
+pdf(
+  file = paste0(output_path,saved_name,"peak_distribute",".pdf"),
+  width = 11, height = 20, title = "ChIPseeker", 
+  colormodel = "cmyk",compress = F
+)
+
+# Plot peaks distribution on all chromosomes
+# weightCol= was used when peaks have some meaningful value
+covplot(peaks,weightCol = fold_enrich_column)
+dev.off()
+print(paste0(output_path,saved_name,"peak distribution ","Saved."))
+# ----------------------------------------------------------------------------------------- #
+# Annotate peaks at TSS 3kb (promoter)
+print(paste("Annotate Promoter region +, -",promoter_range,"bp..."))
+promoter <- getPromoters(
+  TxDb=txdb, 
+  upstream=promoter_range, 
+  downstream=promoter_range
+)
+print("Plot peaks frequency at TSS...")
+pdf(
+  file = paste0(output_path,saved_name,"peak_freq_TSS",".pdf"),
+  width = 5, height = 12, title = "ChIPseeker", 
+  colormodel = "cmyk",compress = F
+)
+# plot peaks frequency at promoter range
+tagMatrix <- getTagMatrix(peaks, windows=promoter)
+par(pin=c(3,8))
+tagHeatmap(
+  tagMatrix, 
+  xlim=c(-promoter_range, promoter_range), 
+  title = "peaks distribution",
+  xlab = "TSS",
+  color="red")
+dev.off()
+print(paste0(output_path,saved_name,"peak freq at TSS ","Saved."))
+# ----------------------------------------------------------------------------------------- #
+# Plot histogram
+print("Plot peaks histogram at TSS...")
+pdf(
+  file = paste0(output_path,saved_name,"peak_hist_TSS",".pdf"),
+  width = 5, height = 5, title = "ChIPseeker", 
+  colormodel = "cmyk",compress = F
+)
+plotAvgProf(
+  tagMatrix, xlim=c(-promoter_range, promoter_range),
+  xlab="Genomic Region (5'->3')", 
+  ylab = "Peaks occur Frequency"
+)
+dev.off()
+print(paste0(output_path,saved_name,"peak histogram at TSS ","Saved."))
+# ----------------------------------------------------------------------------------------- #
+# Plot metagene plot
+print("Plot peaks metagene plot...")
+pdf(
+  file = paste0(output_path,saved_name,"peak metagene",".pdf"),
+  width = 5, height = 5, title = "ChIPseeker", 
+  colormodel = "cmyk",compress = F
+)
+plotPeakProf2(peak = peaks, upstream = rel(0.2), downstream = rel(0.2),
+              conf = 0.95, by = "gene", type = "body", nbin = 50,
+              TxDb = txdb,ignore_strand = F)
+dev.off()
+print(paste0(output_path,saved_name,"peak metagene ","Saved."))
+# ----------------------------------------------------------------------------------------- #
+# Annotated peaks and visualize
+print("Annotating peaks...")
+pacman::p_load(ggupset,ggimage)
+# plot peak annotation pie
+peakAnno <- annotatePeak(
+  peak.file, 
+  tssRegion=c(-promoter_range, promoter_range),
+  TxDb=txdb
+)
+# output peak annotation
+peak.anno.df <- as.data.frame(peakAnno)
+rio::export(peak.anno.df,paste0(output_path,saved_name,'peak_annotation.xlsx'),format = "xlsx")
+print(paste0(output_path,saved_name," peak annotation.xlsx ","Saved."))
+# ----------------------------------------------------------------------------------------- #
+print("Plot peaks annotation...")
+pdf(
+  file = paste0(output_path,saved_name,"peak annotaion Pie",".pdf"),
+  width = 6, height = 3, title = "ChIPseeker", 
+  colormodel = "cmyk",compress = F
+)
+plotAnnoPie(peakAnno)
+dev.off()
+print(paste0(output_path,saved_name," peaks annotation Pie ","Saved."))
+# ----------------------------------------------------------------------------------------- #
+# Plot upsetplot & venn diagram
+print("Plot peaks annotation upset...")
+pdf(
+  file = paste0(output_path,saved_name,"peak annotaion Upset",".pdf"),
+  width = 10, height = 8, title = "ChIPseeker", 
+  colormodel = "cmyk",compress = F
+)
+upsetplot(peakAnno, vennpie=T)
+dev.off()
+print(paste0(output_path,saved_name," peaks annotation Upset ","Saved."))
+# ----------------------------------------------------------------------------------------- #
+# Plot peaks distribution relative to gene TSS
+print("Plot distance of peaks (%) to gene TSS...")
+pdf(
+  file = paste0(output_path,saved_name,"peak distance to TSS",".pdf"),
+  width = 4, height = 2, title = "ChIPseeker", 
+  colormodel = "cmyk",compress = F
+)
+plotDistToTSS(
+  peakAnno,
+  title="Distribution of ChIP factor\nrelative to TSS"
+)
+dev.off()
+print(paste0(output_path,saved_name," peaks distance to TSS ","Saved."))
+# ----------------------------------------------------------------------------------------- #
